@@ -405,15 +405,19 @@ function setup_virtualbmc {
 
 
 function setup_virtualpdu {
-  pip_install "virtualpdu"
+    pip_install "virtualpdu"
 
-  iniset $IRONIC_VPDU_CONFIG_FILE global debug True
-  iniset global libvirt_uri "test:///default"
-  iniset firstPDU listen_address "127.0.0.1"
-  iniset firstPDU listen_port "1161"
-  # NOTE(mmitchell): Ports will come later, when nodes are enrolled.
+    if [[ ! -d $(dirname $IRONIC_VPDU_CONFIG_FILE) ]]; then
+        mkdir -p $(dirname $IRONIC_VPDU_CONFIG_FILE)
+    fi
 
-  enable_service ir-vpdu
+    iniset $IRONIC_VPDU_CONFIG_FILE global debug True
+    iniset global libvirt_uri "test:///default"
+    iniset firstPDU listen_address "127.0.0.1"
+    iniset firstPDU listen_port "1161"
+    # NOTE(mmitchell): Ports will come later, when nodes are enrolled.
+
+    enable_service ir-vpdu
 }
 
 # install_ironic() - Install the things!
