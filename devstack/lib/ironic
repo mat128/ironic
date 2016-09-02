@@ -228,7 +228,7 @@ IRONIC_VBMC_CONFIG_FILE=${IRONIC_VBMC_CONFIG_FILE:-$HOME/.vbmc/virtualbmc.conf}
 IRONIC_VBMC_LOGFILE=${IRONIC_VBMC_LOGFILE:-$IRONIC_VM_LOG_DIR/virtualbmc.log}
 
 # Virtual PDU configs
-IRONIC_VPDU_CONFIG_FILE=${IRONIC_VBMC_CONFIG_FILE:-$HOME/.vpdu/virtualpdu.conf}
+IRONIC_VPDU_CONFIG_FILE=${IRONIC_VPDU_CONFIG_FILE:-$HOME/.vpdu/virtualpdu.conf}
 IRONIC_VPDU_PORT_RANGE_START=${IRONIC_VPDU_PORT_RANGE_START:-1}
 
 # To explicitly enable configuration of Glance with Swift
