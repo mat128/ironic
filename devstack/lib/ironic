@@ -227,6 +227,10 @@ IRONIC_VBMC_PORT_RANGE_START=${IRONIC_VBMC_PORT_RANGE_START:-6230}
 IRONIC_VBMC_CONFIG_FILE=${IRONIC_VBMC_CONFIG_FILE:-$HOME/.vbmc/virtualbmc.conf}
 IRONIC_VBMC_LOGFILE=${IRONIC_VBMC_LOGFILE:-$IRONIC_VM_LOG_DIR/virtualbmc.log}
 
+# Virtual PDU configs
+IRONIC_VPDU_CONFIG_FILE=${IRONIC_VBMC_CONFIG_FILE:-$HOME/.vpdu/virtualpdu.conf}
+IRONIC_VPDU_PORT_RANGE_START=${IRONIC_VPDU_PORT_RANGE_START:-1}
+
 # To explicitly enable configuration of Glance with Swift
 # (which is required by some vendor drivers), set this
 # variable to true.
@@ -361,6 +365,11 @@ function is_deployed_by_drac {
     return 1
 }
 
+function is_deployed_by_snmp {
+    [[ -z "${IRONIC_DEPLOY_DRIVER##*_snmp}" ]] && return 0
+    return 1
+}
+
 function is_glance_configuration_required {
     is_deployed_by_agent || [[ "$IRONIC_CONFIGURE_GLANCE_WITH_SWIFT" == "True" ]] && return 0
     return 1
@@ -394,6 +403,19 @@ function setup_virtualbmc {
     iniset $IRONIC_VBMC_CONFIG_FILE log logfile $IRONIC_VBMC_LOGFILE
 }
 
+
+function setup_virtualpdu {
+  pip_install "virtualpdu"
+
+  iniset $IRONIC_VPDU_CONFIG_FILE global debug True
+  iniset global libvirt_uri "test:///default"
+  iniset firstPDU listen_address "127.0.0.1"
+  iniset firstPDU listen_port "1161"
+  # NOTE(mmitchell): Ports will come later, when nodes are enrolled.
+
+  enable_service ir-vpdu
+}
+
 # install_ironic() - Install the things!
 function install_ironic {
     # make sure all needed service were enabled
@@ -420,6 +442,10 @@ function install_ironic {
 
     if is_deployed_by_ipmitool && [[ "$IRONIC_IS_HARDWARE" == "False" ]]; then
         setup_virtualbmc
+    fi
+    
+    if is_deployed_by_snmp && [[ "$IRONIC_IS_HARDWARE" == "False" ]]; then
+        setup_virtualpdu
     fi
 }
 
@@ -825,6 +851,10 @@ function start_ironic {
     if [[ "$IRONIC_IPXE_ENABLED" == "True" ]] ; then
         restart_apache_server
     fi
+
+    if is_service_enabled ir-vpdu; then
+        start_virtualpdu
+    fi
 }
 
 # start_ironic_api() - Used by start_ironic().
@@ -843,6 +873,13 @@ function start_ironic_conductor {
     run_process ir-cond "$IRONIC_BIN_DIR/ironic-conductor --config-file=$IRONIC_CONF_FILE"
     # TODO(romcheg): Find a way to check whether the conductor has started.
 }
+
+# start_virtualpdu() - Used by TBD
+# Starts VirtualPDU
+function start_virtualpdu {
+    run_process ir-vpdu "virtualpdu $IRONIC_VPDU_CONFIG_FILE"
+}
+
 
 # stop_ironic() - Stop running processes
 function stop_ironic {
@@ -939,13 +976,15 @@ function create_bridge_and_vms {
     fi
 
     local vbmc_port=$IRONIC_VBMC_PORT_RANGE_START
+    local pdu_outlet=$IRONIC_VPDU_PORT_RANGE_START
     local vm_name
     for vm_name in $(_ironic_bm_vm_names); do
         sudo -E su $STACK_USER -c "$IRONIC_SCRIPTS_DIR/create-node.sh -n $vm_name \
             -c $IRONIC_VM_SPECS_CPU -m $IRONIC_VM_SPECS_RAM -d $IRONIC_VM_SPECS_DISK \
             -a $IRONIC_VM_SPECS_CPU_ARCH -b $IRONIC_VM_NETWORK_BRIDGE -e $IRONIC_VM_EMULATOR \
-            -p $vbmc_port -f $IRONIC_VM_SPECS_DISK_FORMAT $log_arg" >> $IRONIC_VM_MACS_CSV_FILE
+            -p $vbmc_port -o $pdu_outlet -f $IRONIC_VM_SPECS_DISK_FORMAT $log_arg" >> $IRONIC_VM_MACS_CSV_FILE
         vbmc_port=$((vbmc_port+1))
+        pdu_outlet=$((pdu_outlet+1))
     done
     local ironic_net_id
     ironic_net_id=$(openstack network show "$PRIVATE_NETWORK_NAME" -c id -f value)
@@ -997,6 +1036,13 @@ function enroll_nodes {
                 -i ipmi_address=127.0.0.1 \
                 -i ipmi_username=admin \
                 -i ipmi_password=password"
+        elif is_deployed_by_snmp; then
+            local node_options="\
+                -i snmp_driver=apc_rackpdu \
+                -i snmp_address=127.0.0.1 \
+                -i snmp_port=1161 \
+                -i snmp_protocol=2c \
+                -i snmp_community=openstack"
         else
             local node_options="\
                 -i ssh_virt_type=$IRONIC_SSH_VIRT_TYPE \
