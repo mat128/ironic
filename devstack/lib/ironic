@@ -413,8 +413,9 @@ function setup_virtualpdu {
 
     iniset $IRONIC_VPDU_CONFIG_FILE global debug True
     iniset global libvirt_uri "test:///default"
-    iniset firstPDU listen_address "127.0.0.1"
+    iniset firstPDU listen_host "127.0.0.1"
     iniset firstPDU listen_port "1161"
+    iniset firstPDU community "community"
     # NOTE(mmitchell): Ports will come later, when nodes are enrolled.
 
     enable_service ir-vpdu
@@ -1046,7 +1047,7 @@ function enroll_nodes {
                 -i snmp_address=127.0.0.1 \
                 -i snmp_port=1161 \
                 -i snmp_protocol=2c \
-                -i snmp_community=openstack"
+                -i snmp_community=private"
         else
             local node_options="\
                 -i ssh_virt_type=$IRONIC_SSH_VIRT_TYPE \
@@ -1080,6 +1081,10 @@ function enroll_nodes {
                 local vbmc_port
                 vbmc_port=$(echo $hardware_info | awk '{print $2}')
                 node_options+=" -i ipmi_port=$vbmc_port"
+            elif is_deployed_by_snmp; then
+                local pdu_outlet
+                pdu_outlet=$(echo $hardware_info | awk '{print $3}')
+                node_options+=" -i snmp_outlet=$pdu_outlet"
             fi
             # Local-link-connection options
             if [[ "${IRONIC_USE_LINK_LOCAL}" == "True" ]]; then
@@ -1088,9 +1093,9 @@ function enroll_nodes {
                 local switch_id
                 local port_id
 
-                switch_info=$(echo $hardware_info |awk '{print $3}')
-                switch_id=$(echo $hardware_info |awk '{print $4}')
-                port_id=$(echo $hardware_info |awk '{print $5}')
+                switch_info=$(echo $hardware_info |awk '{print $4}')
+                switch_id=$(echo $hardware_info |awk '{print $5}')
+                port_id=$(echo $hardware_info |awk '{print $6}')
 
                 llc_opts="-l switch_id=${switch_id} -l switch_info=${switch_info} -l port_id=${port_id}"
 
